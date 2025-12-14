@@ -281,6 +281,7 @@ def _select_key_levels(
         "resistance_2": res2,
         "max_pain_target": mp_target,
         "max_pain_zone": [mp_low, mp_high],
+        "atr14": float((config.get("technicals", {}) or {}).get("atr14", 50.0)), # To be enriched by caller
     }
 
 
@@ -291,33 +292,48 @@ def _scenario_bear(last: float, key: Dict[str, Any], prob: float, hold_minutes: 
     pivot = key.get("weekly_pivot")
     res1 = key.get("resistance_1")
 
+    # Dynamic ATR targets for Tier 1
+    atr = key.get("atr14")
+    
     trigger_level = s1
     if key.get("gamma_flip") is not None and s1 is not None:
         trigger_level = min(float(s1), float(key["gamma_flip"]))
+    
+    # Logic: If Tier 3 levels missing, use ATR-based level
+    if trigger_level is None and atr is not None:
+        trigger_level = last - (0.5 * atr)
 
     targets: List[float] = []
     if s2 is not None:
         targets.append(float(s2))
     if mp is not None:
         targets.append(float(mp))
-    if not targets and s1 is not None:
+    
+    # Fallback to ATR targets if no structural targets
+    if not targets and atr is not None:
+        targets = [last - (1.0 * atr), last - (2.0 * atr)]
+    elif not targets and s1 is not None:
         targets = [float(s1) - 50.0]
 
+    # Invalidation Logic
     if close_confirm:
         invalid_level = None
         if pivot is not None:
             invalid_level = max(float(pivot), float(res1) if res1 is not None else float(pivot))
         elif res1 is not None:
             invalid_level = float(res1)
+        elif atr is not None:
+            invalid_level = last + (1.0 * atr)
+            
         invalid = f"Daily close > {invalid_level:.0f}" if invalid_level is not None else "Daily close above key resistance"
     else:
         invalid = f"Reclaim > {float(res1):.0f}" if res1 is not None else "Reclaim key resistance"
 
     return {
-        "name": "Bearish pull-to-support/maxpain",
+        "name": "Bearish pull-to-support/maxpain" if mp else "Bearish Trend (Tier 1)",
         "prob": round(prob, 4),
         "trigger": f"Break < {float(trigger_level):.0f} and hold {hold_minutes}m" if trigger_level is not None else f"Break below support and hold {hold_minutes}m",
-        "target": [round(t, 0) for t in targets],
+        "target": [round(t, 2) for t in targets],
         "invalid": invalid,
     }
 
@@ -325,17 +341,23 @@ def _scenario_bear(last: float, key: Dict[str, Any], prob: float, hold_minutes: 
 def _scenario_neutral(last: float, key: Dict[str, Any], prob: float, hold_minutes: int) -> Dict[str, Any]:
     low = key.get("support_1") or key.get("max_pain_target")
     high = key.get("weekly_pivot") or key.get("resistance_1")
+    atr = key.get("atr14")
 
-    if low is None:
-        low = last - 40.0
-    if high is None:
+    if low is None and atr is not None:
+        low = last - (1.0 * atr)
+    elif low is None:
+        low = last - 40.0 # Extreme fallback
+
+    if high is None and atr is not None:
+        high = last + (1.0 * atr)
+    elif high is None:
         high = last + 40.0
 
     return {
         "name": "Neutral range / consolidation",
         "prob": round(prob, 4),
         "trigger": f"Hold above {float(low):.0f} and fail to sustain > {float(high):.0f} for {hold_minutes}m",
-        "target": [round(float(low), 0), round(float(high), 0)],
+        "target": [round(float(low), 2), round(float(high), 2)],
         "invalid": "Range expansion with momentum/volume (breakout or breakdown)",
     }
 
@@ -345,8 +367,13 @@ def _scenario_bull(last: float, key: Dict[str, Any], prob: float, hold_minutes: 
     res1 = key.get("resistance_1")
     res2 = key.get("resistance_2")
     flip = key.get("gamma_flip")
+    atr = key.get("atr14")
 
     reclaim = pivot if pivot is not None else flip
+    
+    # Tier 1 fallback: Reclaim SMA or just current momentum
+    if reclaim is None and atr is not None:
+        reclaim = last + (0.3 * atr) # Small push above current
 
     confirm = None
     if res1 is not None and pivot is not None:
@@ -355,10 +382,14 @@ def _scenario_bull(last: float, key: Dict[str, Any], prob: float, hold_minutes: 
         confirm = float(res1)
     elif pivot is not None:
         confirm = float(pivot) + 12.0
+    elif atr is not None:
+        confirm = float(reclaim) + (0.5 * atr)
 
     targets: List[float] = []
     if res2 is not None:
         targets.append(float(res2))
+    elif atr is not None:
+         targets = [last + (1.0 * atr), last + (2.0 * atr)]
     else:
         targets = [last + 50.0, last + 100.0]
 
@@ -368,10 +399,10 @@ def _scenario_bull(last: float, key: Dict[str, Any], prob: float, hold_minutes: 
         invalid = f"Reject < {float(reclaim):.0f} after reclaim" if reclaim is not None else "Reversal back into range"
 
     return {
-        "name": "Bullish reversal / breakout",
+        "name": "Bullish reversal / breakout" if pivot else "Bullish Trend (Tier 1)",
         "prob": round(prob, 4),
         "trigger": f"Reclaim > {float(reclaim):.0f} and sustain > {float(confirm):.0f} for {hold_minutes}m" if reclaim is not None and confirm is not None else f"Reclaim key level and hold {hold_minutes}m",
-        "target": [round(t, 0) for t in targets],
+        "target": [round(t, 2) for t in targets],
         "invalid": invalid,
     }
 

@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
         ],
     )
     parser.add_argument("--config", default="config/spx_config.yaml")
+    parser.add_argument("--symbol", default=None, help="Override symbol (e.g. NVDA, AAPL)")
     return parser.parse_args()
 
 
@@ -41,8 +42,11 @@ def main() -> int:
 
     ctx = get_run_context(session=args.session, timezone=config["timezone"], version=config.get("version", "1.0.0"))
 
+    # Determine symbol: CLI arg > Config > Default
+    symbol = args.symbol if args.symbol else config["symbols"]["spx"]
+
     raw_inputs = fetch_all_inputs(
-        symbol=config["symbols"]["spx"],
+        symbol=symbol,
         proxy=config["symbols"]["proxy"],
         asof_utc=ctx["asof_utc"],
         session=args.session,
@@ -53,7 +57,15 @@ def main() -> int:
     (OUTPUT_DIR / "json").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "reports").mkdir(parents=True, exist_ok=True)
 
-    save_snapshot(raw_inputs, OUTPUT_DIR / "inputs" / f"{ctx['run_id']}.json")
+    
+    # Prune non-serializable objects (DataFrame) from inputs before saving snapshot
+    inputs_snapshot = raw_inputs.copy()
+    if "price" in inputs_snapshot and "history" in inputs_snapshot["price"]:
+        del inputs_snapshot["price"]["history"]
+    if "technicals_raw" in inputs_snapshot and "df" in inputs_snapshot["technicals_raw"]:
+        del inputs_snapshot["technicals_raw"]["df"]
+    
+    save_snapshot(inputs_snapshot, OUTPUT_DIR / "inputs" / f"{ctx['run_id']}.json")
 
     macro_result = analyze_macro(
         rates=raw_inputs.get("rates", {}),
@@ -86,7 +98,7 @@ def main() -> int:
         "session": ctx["session"],
         "version": ctx["version"],
         "market": {"symbol": config["symbols"]["spx"], "proxy": config["symbols"]["proxy"]},
-        "price": raw_inputs.get("price", {}),
+        "price": {k: v for k, v in raw_inputs.get("price", {}).items() if k != "history"}, # sanitize
         "macro": macro_result,
         "technical": technical_result,
         "structure": structure_result,

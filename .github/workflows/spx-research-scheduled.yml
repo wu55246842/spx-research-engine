@@ -26,6 +26,10 @@ on:
         description: "Session override (PRE/OPEN_CONFIRM/MID/POWER_HOUR/CLOSE/SAT_REVIEW/SUN_WEEKLY)"
         required: false
         default: ""
+      symbol:
+        description: "Symbol to analyze (e.g. SPX, NVDA, BTC-USD)"
+        required: false
+        default: "SPX"
 
 jobs:
   run-research:
@@ -83,6 +87,7 @@ jobs:
         run: |
           python -m research.runner \
             --session "${{ steps.sess.outputs.session }}" \
+            --symbol "${{ github.event.inputs.symbol || 'SPX' }}" \
             --config config/spx_config.yaml
 
       - name: Upload outputs as artifact
