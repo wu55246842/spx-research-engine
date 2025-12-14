@@ -42,6 +42,8 @@ jobs:
           # 下载最近一次 workflow_run 的所有 artifacts
           # download-artifact v4 会把 artifacts 拉到当前目录下子文件夹
           path: _artifacts
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build static site
         shell: bash
