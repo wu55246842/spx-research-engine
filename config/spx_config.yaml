@@ -1,0 +1,53 @@
+timezone: Asia/Singapore
+version: 1.0.0
+
+symbols:
+  spx: SPX
+  proxy: ES
+
+scenario_engine:
+  hold_minutes: 30
+  use_close_confirmation: true
+  event_week_tilt: 0.05
+
+  scalers:
+    max_pain_gravity_points: 150
+    rate_pressure_center: 50
+    rate_pressure_span: 50
+
+  proximity:
+    near_level_points: 25
+
+  weights:
+    bear:
+      below_pivot: 1.20
+      below_flip: 1.00
+      macd_bear: 1.00
+      rsi_weak: 0.60
+      mp_gravity_scaled: 0.80
+      neg_gamma: 1.00
+      vix_flattening: 0.40
+      vix_backward: 0.80
+      risk_off: 0.60
+      rate_pressure_scaled: 0.60
+      event_risk_high: 0.40
+
+    neutral:
+      near_support: 0.90
+      near_resistance: 0.90
+      pos_gamma: 1.00
+      not_event_risk: 0.40
+
+    bull:
+      above_pivot: 1.20
+      above_flip: 0.80
+      not_macd_bear: 0.80
+      not_rsi_weak: 0.40
+      pos_gamma: 0.80
+      risk_on: 0.60
+      low_rate_pressure: 0.60
+
+thresholds:
+  gamma_flip_default: 6850
+  fallback_support: 6800
+  fallback_resistance: 6888

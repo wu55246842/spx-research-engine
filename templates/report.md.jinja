@@ -1,0 +1,38 @@
+# SPX Research Report
+
+- Run ID: **{{ run_id }}**
+- Session: **{{ session }}**
+- As-of (UTC): **{{ asof_utc }}**
+- Version: **{{ version }}**
+
+## Executive Summary
+
+**Macro bias:** {{ macro.macro_bias }}  
+**Event risk:** {{ macro.event_risk_level }}  
+**Structure regime:** {{ structure.regime }}  
+
+## Price Snapshot
+
+- Last: {{ price.last }}
+- Prev close: {{ price.prev_close }}
+
+## Key Levels
+
+- Weekly Pivot: {{ technical.levels.weekly_pivot }}
+- Gamma Flip: {{ structure.gamma_flip }}
+- Supports: {{ technical.levels.supports }}
+- Resistances: {{ technical.levels.resistances }}
+- Max Pain Zone: {{ structure.max_pain_zone }}
+
+## Scenarios (Probability Matrix)
+
+{% for s in scenarios %}
+### {{ loop.index }}. {{ s.name }} (p={{ '%.2f'|format(s.prob*100) }}%)
+- Trigger: {{ s.trigger }}
+- Target: {{ s.target }}
+- Invalidation: {{ s.invalid }}
+{% endfor %}
+
+## Notes
+
+- This report is auto-generated. Inputs health: {{ inputs_health }}

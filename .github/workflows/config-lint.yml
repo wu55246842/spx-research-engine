@@ -1,0 +1,38 @@
+name: Config Lint
+
+on:
+  pull_request:
+    paths:
+      - "config/**"
+      - "research/config.py"
+      - "research/tools/validate_config.py"
+      - ".github/workflows/config-lint.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "config/**"
+      - "research/config.py"
+      - "research/tools/validate_config.py"
+      - ".github/workflows/config-lint.yml"
+  workflow_dispatch:
+
+jobs:
+  config-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate spx_config.yaml
+        run: |
+          python -m research.tools.validate_config --config config/spx_config.yaml

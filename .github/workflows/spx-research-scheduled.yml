@@ -1,0 +1,92 @@
+name: SPX Research Scheduled
+
+on:
+  schedule:
+    # --- Weekdays (Mon-Fri) ---
+    # SGT 18:30 -> UTC 10:30
+    - cron: "30 10 * * 1-5"
+    # SGT 22:15 -> UTC 14:15
+    - cron: "15 14 * * 1-5"
+    # SGT 01:00 -> UTC 17:00 (previous UTC day)
+    - cron: "0 17 * * 1-5"
+    # SGT 04:30 -> UTC 20:30
+    - cron: "30 20 * * 1-5"
+    # SGT 06:15 -> UTC 22:15
+    - cron: "15 22 * * 1-5"
+
+    # --- Weekend ---
+    # SAT SGT 11:00 -> UTC 03:00
+    - cron: "0 3 * * 6"
+    # SUN SGT 11:00 -> UTC 03:00
+    - cron: "0 3 * * 0"
+
+  workflow_dispatch:
+    inputs:
+      session:
+        description: "Session override (PRE/OPEN_CONFIRM/MID/POWER_HOUR/CLOSE/SAT_REVIEW/SUN_WEEKLY)"
+        required: false
+        default: ""
+
+jobs:
+  run-research:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Config lint
+        run: |
+          python -m research.tools.validate_config --config config/spx_config.yaml
+
+      - name: Determine session
+        id: sess
+        shell: bash
+        run: |
+          # Manual override (workflow_dispatch)
+          if [ "${{ github.event.inputs.session }}" != "" ]; then
+            echo "session=${{ github.event.inputs.session }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Scheduled runs: map cron -> session
+          CRON="${{ github.event.schedule }}"
+          echo "Triggered by cron: $CRON"
+
+          case "$CRON" in
+            "30 10 * * 1-5") SESSION="PRE" ;;
+            "15 14 * * 1-5") SESSION="OPEN_CONFIRM" ;;
+            "0 17 * * 1-5")  SESSION="MID" ;;
+            "30 20 * * 1-5") SESSION="POWER_HOUR" ;;
+            "15 22 * * 1-5") SESSION="CLOSE" ;;
+            "0 3 * * 6")     SESSION="SAT_REVIEW" ;;
+            "0 3 * * 0")     SESSION="SUN_WEEKLY" ;;
+            *) SESSION="PRE" ;;  # safe fallback
+          esac
+
+          echo "session=$SESSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run SPX research
+        env:
+          # 如果你未来接数据源API，把key放到 GitHub Secrets
+          DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
+        run: |
+          python -m research.runner \
+            --session "${{ steps.sess.outputs.session }}" \
+            --config config/spx_config.yaml
+
+      - name: Upload outputs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spx-research-${{ steps.sess.outputs.session }}-${{ github.run_id }}
+          path: outputs/
