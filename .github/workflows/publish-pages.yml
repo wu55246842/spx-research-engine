@@ -35,14 +35,34 @@ jobs:
           pip install -r requirements.txt
           pip install markdown jinja2
 
-      # 关键：拉取上一个工作流产物（outputs/）
+      - name: Determine Run ID
+        id: get_run_id
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # If triggered by workflow_run, use that ID
+          if [ "${{ github.event.workflow_run.id }}" != "" ]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # If manual dispatch, find the latest successful run of the research workflow
+          echo "Finding latest successful run of 'SPX Research Scheduled'..."
+          LATEST_RUN_ID=$(gh run list --workflow "spx-research-scheduled.yml" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          
+          if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
+            echo "Error: No successful run found to publish."
+            exit 1
+          fi
+
+          echo "Found latest run_id: $LATEST_RUN_ID"
+          echo "run_id=$LATEST_RUN_ID" >> "$GITHUB_OUTPUT"
+
       - name: Download research artifacts
         uses: actions/download-artifact@v4
         with:
-          # 下载最近一次 workflow_run 的所有 artifacts
-          # download-artifact v4 会把 artifacts 拉到当前目录下子文件夹
           path: _artifacts
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.get_run_id.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build static site
